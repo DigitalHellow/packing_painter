@@ -5,6 +5,7 @@ problem
 """
 
 import cv2
+import json
 import random
 import numpy as np
 
@@ -187,3 +188,28 @@ class PackingOptimizer:
             synthetic_img[mask] = overlayed.reshape(-1,4)
 
         return synthetic_img
+
+
+    def save_solution(self, filename: str,
+            image_names: Iterable[str], scale=1.0) -> None:
+        """
+        Saves the solution to be rendered by Open GL
+        """
+        WIDTH, HEIGHT = self.image.shape
+        data = {str(i): {
+                    # normalize between -1 and 1
+                    "x": 2 * center[0] / WIDTH - 1,
+                    "y": 2 * center[1] / HEIGHT - 1,
+                    "r": center[2] / min(WIDTH, HEIGHT),
+                    "filename": random.choice(image_names),
+                    "scale": scale
+                }
+            for i, center in enumerate(self.centers)}
+
+        if not filename.startswith("config/"): 
+            filename = "config/" + filename
+        if not filename.endswith(".json"): 
+            filename += ".json"
+        
+        with open(filename, "w") as f:
+            json.dump(data, f)

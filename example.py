@@ -27,6 +27,10 @@ c = np.array(
     [opt.circle_mask(*p) for p in centers]
 ).sum(0)
 
+# save data to use with open gl
+opt.save_solution("data", ["imgs/masked_0.png", "imgs/masked_1.png",
+    "imgs/masked_2.png"])
+
 # show solution
 plt.imshow(image - c, cmap="gray")
 
@@ -70,11 +74,11 @@ labeled_filters = [ob_seg.filter_label(flower, labeled_img, filter_idx[i])
 f, axarr = plt.subplots(1,len(labeled_filters)) 
 for i, labeled_filter in enumerate(labeled_filters):
     axarr[i].imshow(labeled_filter)
+    cv2.imwrite(f"imgs/masked_{i}.png", labeled_filter)
 plt.tight_layout()
 plt.show()
 
 # %%
-
 scale = 1.5
 synthetic_img = opt.make_image(scale, labeled_filters)
 
