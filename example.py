@@ -4,10 +4,8 @@ Running example of how to use the packing optimizer
 
 # %%
 import cv2
-import random
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.ndimage.interpolation import rotate
 
 from optimizer import utils
 from optimizer import packing_optimizer as po
@@ -33,9 +31,9 @@ c = np.array(
 plt.imshow(image - c, cmap="gray")
 
 # %%
-# get flowers from our image
-# parameters from segmentation
-# where chosen after a few tries
+# Get flowers from our image.
+# Parameters for segmentation where chosen after a few tries.
+# If you have already masked your inputs you can just load it using opencv
 edges_params = [(30, 150), (30, 150), (30, 200)]
 grays = [0, 1, 1]
 blurs = [0, 0, 1]
@@ -76,36 +74,11 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# resize image
-flower_images = {}
+
 scale = 1.5
-
-for r in R:
-    h = int(2*scale*r)
-    w = int(2*scale*r)
-    flower_images[r] = [
-        cv2.resize(labeled_filter, (w+1, h+1))
-        for labeled_filter in labeled_filters
-    ]
-
-# create new image using the flowers
-should_rotate = True
-synthetic_img = np.zeros((*image.shape, 4), dtype=np.uint8)
-# add the biggest flowers last, so that they stay on top
-# of the generated image
-centers.sort(key=lambda c: c[-1])
-for center in centers:
-    x, y, r = center
-    angle = np.random.randint(360) if should_rotate else 0
-    flower_img = random.choice(flower_images[r])
-    flower_img = rotate(flower_img, angle=angle, reshape=False)
-    mask = utils.rec_mask(image, x, y, int(scale*r)+1)
-
-    overlayed = utils.overlay(synthetic_img[mask], flower_img)
-    synthetic_img[mask] = overlayed.reshape(-1,4)
+synthetic_img = opt.make_image(scale, labeled_filters)
 
 plt.imshow(synthetic_img)
-
 # save output
 cv2.imwrite("imgs/out.png", synthetic_img)
 # %%

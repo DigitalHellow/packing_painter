@@ -8,6 +8,8 @@ import cv2
 import random
 import numpy as np
 
+from scipy.ndimage.interpolation import rotate
+
 from typing import Iterable, List, Tuple
 
 from . import utils
@@ -19,6 +21,7 @@ class PackingOptimizer:
     """
 
     def __init__(self, R: Iterable[int], image: np.ndarray) -> None:
+        self.centers: List[Tuple[int, int, int]]
         self.R = R.astype(np.int16) # circles radius
         
         self.image = image.copy() if len(image.shape) == 2 \
@@ -151,4 +154,36 @@ class PackingOptimizer:
             if i%10 == 0:
                 print(i)
 
-        return n_picked_centers
+        self.centers = n_picked_centers
+        return n_picked_centers.copy()
+
+
+    def make_image(self, scale: float,
+            labeled_filters: np.ndarray) -> np.ndarray:
+        flower_images = {}
+
+        for r in self.R:
+            h = int(2*scale*r)
+            w = int(2*scale*r)
+            flower_images[r] = [
+                cv2.resize(labeled_filter, (w+1, h+1))
+                for labeled_filter in labeled_filters
+            ]
+
+        # create new image using the flowers
+        should_rotate = True
+        synthetic_img = np.zeros((*self.image.shape, 4), dtype=np.uint8)
+        # add the biggest flowers last, so that they stay on top
+        # of the generated image
+        self.centers.sort(key=lambda c: c[-1])
+        for center in self.centers:
+            x, y, r = center
+            angle = np.random.randint(360) if should_rotate else 0
+            flower_img = random.choice(flower_images[r])
+            flower_img = rotate(flower_img, angle=angle, reshape=False)
+            mask = utils.rec_mask(self.image, x, y, int(scale*r)+1)
+
+            overlayed = utils.overlay(synthetic_img[mask], flower_img)
+            synthetic_img[mask] = overlayed.reshape(-1,4)
+
+        return synthetic_img
