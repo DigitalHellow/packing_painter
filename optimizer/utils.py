@@ -41,17 +41,29 @@ def mcircle_mask(image_shape: Tuple[int, int]) -> Callable[[int, int, int], np.n
     return circle_mask
 
 
-def rec_mask(image: np.ndarray, 
-        cx: int, cy: int, r: int) -> np.ndarray:
+def mrec_mask(image_shape: Tuple[int, int]) -> \
+        Callable[[int, int, int, int], np.ndarray]:
     """
-    Creates a circular mask at the given center
-    coordinates
+    Defines variables used inside rec_mask
     """
-    x = np.arange(image.shape[0]).reshape(1,-1)
-    y = np.arange(image.shape[1]).reshape(-1,1)
-    mask = ((x + r > cx) & (x - r < cx)) & \
-        ((y + r > cy) & (y - r < cy))
-    return mask
+    x = np.arange(image_shape[0]).reshape(1,-1)
+    y = np.arange(image_shape[1]).reshape(-1,1)
+    img_shape = image_shape
+
+    @lru_cache(maxsize=1024)
+    def rec_mask(cx: int, cy: int, 
+            w: int, h: int) -> np.ndarray:
+        """
+        Creates a circular mask at the given center
+        coordinates
+        """
+        mask = ((x + w > cx) & (x - w < cx)) & \
+            ((y + h > cy) & (y - h < cy))
+        rec = np.zeros(img_shape, dtype=np.int8)
+        rec[mask] = 1
+        return rec
+
+    return rec_mask
 
 
 def overlay(_img1: np.ndarray, img2: np.ndarray) -> np.ndarray:

@@ -9,11 +9,15 @@ import json
 import random
 import numpy as np
 
+import scipy.signal as signal
 from scipy.ndimage.interpolation import rotate
 
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Union
 
 from . import utils
+
+# writing union all the time 
+Size = Union[int, np.ndarray]
 
 class PackingOptimizer:
     """
@@ -21,13 +25,22 @@ class PackingOptimizer:
     with circles.
     """
 
-    def __init__(self, R: Iterable[int], image: np.ndarray) -> None:
+    def __init__(self, R: Iterable[Size], image: np.ndarray) -> None:
         self.centers: List[Tuple[int, int, int]]
-        self.R = R.astype(np.int16) # circles radius
-        
         self.image = image.copy() if len(image.shape) == 2 \
             else utils.load_bin_image(image, True)
-        self.circle_mask = utils.mcircle_mask(self.image.shape)
+
+        self.is_rec = hasattr(R[0], '__iter__')
+        if self.is_rec:
+            self.R = [np.array(r, dtype=np.int16) for r in R]
+            # lambda just for the sweet lru cache
+            self.calc_mask = lambda x, y, r: utils.mrec_mask(
+                self.image.shape)(x, y, r[0], r[1])
+        
+        else:
+            self.R = R.astype(np.int16) # circles radius
+            self.calc_mask = utils.mcircle_mask(self.image.shape)
+
         self._AREA = np.sum(self.image == 1)
         
 
@@ -51,12 +64,13 @@ class PackingOptimizer:
         while len(R_copy) > 0:
             r = R_copy.pop()
         
-            circles = np.array(
-                [self.circle_mask(p[0], p[1], p[2] + r) for p in picked_centers]
+            masks = np.array(
+                [self.calc_mask(p[0], p[1], p[2] + r) 
+                for p in picked_centers]
             ).sum(0)
             
             # possible locations to pick the center
-            x, y = np.where(image - circles == 1)
+            x, y = np.where(image - masks == 1)
 
             if (l:=len(x)) == 0:
                 continue # if current radius doesn't fit go to next one
@@ -71,8 +85,8 @@ class PackingOptimizer:
 
     def minimize_circle_loss(self, 
             center: Tuple[int, int, int], image: np.ndarray, 
-            _picked_centers: List[Tuple[int, int, int]]) -> \
-                Tuple[List[Tuple[int, int, int]], bool]:
+            _picked_centers: List[Tuple[int, int, Size]]) -> \
+                Tuple[List[Tuple[int, int, Size]], bool]:
         """
         Tries to minize the given circle loss by moving its
         center, lowering its radius and/or spliting it up 
@@ -85,32 +99,37 @@ class PackingOptimizer:
 
         R_copy = list(self.R)
         # remove bigger radius
-        R_copy = R_copy[:R_copy.index(center[2])]
+        if type(R_copy[0]) == np.ndarray:
+            R_copy = R_copy[:next((i 
+                for i, r in enumerate(R_copy) if r is center[2]))]    
+        else:
+            R_copy = R_copy[:R_copy.index(center[2])]
 
         if len(R_copy) == 0:
             return (picked_centers, False)
         
-        while (center:= self.pick_center(picked_centers, image, R_copy)) is not None:
+        while (center:= self.pick_center(picked_centers, 
+                image, R_copy)) is not None:
             picked_centers.append(center)
         
         return (picked_centers, True)
 
 
-    def circle_cost(self, center: Tuple[int, int, int],
+    def out_cost(self, center: Tuple[int, int, Size],
             image: np.ndarray) -> int:
         """
-        Circle loss is defined as the area outside the image
+        Area of the given object outside the image
         """
         return self.area_outside(image, *center)
 
 
-    def area_outside(self, img: np.ndarray, 
-            cx: int, cy: int, r: int) -> int:
+    def area_outside(self, img: np.ndarray, cx: int, 
+            cy: int, r: Size) -> int:
         """
-        Returns the circle area outside the image
+        Returns the area outside the image
         """
-        circle = self.circle_mask(cx, cy, r)
-        return np.sum(circle | img) - self._AREA
+        obj_area = self.calc_mask(cx, cy, r)
+        return np.sum(obj_area | img) - self._AREA
 
 
     def total_cost(self, 
@@ -121,23 +140,44 @@ class PackingOptimizer:
         between circles
         """
         circles = np.array(
-            [self.circle_mask(*p) for p in picked_centers]
+            [self.calc_mask(*p) for p in picked_centers]
         ).sum(0)
         cost = np.sum(image ^ circles)
         return cost
 
     
-    def optimize(self) -> List[Tuple[int, int, int]]:
+    def optimize(self) -> List[Tuple[
+            int, int, Size]]:
         """
         Solves the packing problem and returns the center coords and 
         radius of each circle
         """
+        # check for trivial case
+        if self.is_rec and len(self.R)==1:
+            step = np.max(self.R)
+            kernel = np.ones(self.R[0])
+
+            # recreate the images using the squares
+            centers = signal.convolve2d(self.image, 
+                kernel[::-1, ::-1], 
+                mode='valid')[::step, ::step]
+            centers[centers >= 1] = 1
+            centers = [(j*step, i*step, self.R[0]) 
+                for i, row in enumerate(centers)
+                    for j, value in enumerate(row) if value]
+            self.centers = centers.copy()
+            return centers
+
+
+        # real optimization starts here
         picked_centers = [] # initial solution
-        while (center:= self.pick_center(picked_centers, self.image)) is not None:
+        while (center:= self.pick_center(picked_centers, 
+                self.image)) is not None:
             picked_centers += [center]
 
         # cost of each circle
-        c_costs = [self.circle_cost(c, self.image) for c in picked_centers]
+        c_costs = [self.out_cost(c, self.image) 
+            for c in picked_centers]
 
         # optimize circles which are outside the image
         n_picked_centers = picked_centers
@@ -151,7 +191,8 @@ class PackingOptimizer:
             else:
                 break
 
-            c_costs = [self.circle_cost(c, self.image) for c in n_picked_centers]
+            c_costs = [self.out_cost(c, self.image) 
+                for c in n_picked_centers]
             if i%10 == 0:
                 print(i)
 
@@ -161,6 +202,9 @@ class PackingOptimizer:
 
     def make_image(self, scale: float,
             labeled_filters: np.ndarray) -> np.ndarray:
+        """
+        Creates a sample of the image after the optimization
+        """
         flower_images = {}
 
         for r in self.R:
@@ -197,13 +241,16 @@ class PackingOptimizer:
         """
         WIDTH, HEIGHT = self.image.shape
         data = {str(i): {
-                    # normalize between -1 and 1
-                    "x": 2 * center[0] / WIDTH - 1,
-                    "y": 2 * center[1] / HEIGHT - 1,
-                    "r": center[2] / min(WIDTH, HEIGHT),
-                    "filename": random.choice(image_names),
-                    "scale": scale
-                }
+                # normalize between -1 and 1
+                "x": 2 * center[0] / WIDTH - 1,
+                "y": 2 * center[1] / HEIGHT - 1,
+                "r": center[2][0] / min(WIDTH, HEIGHT) \
+                    if self.is_rec else center[2] / min(WIDTH, HEIGHT),
+                "r2": center[2][1] / min(WIDTH, HEIGHT) \
+                    if self.is_rec else 0,
+                "filename": random.choice(image_names),
+                "scale": scale
+            }
             for i, center in enumerate(self.centers)}
 
         if not filename.startswith("config/"): 
@@ -213,3 +260,4 @@ class PackingOptimizer:
         
         with open(filename, "w") as f:
             json.dump(data, f)
+

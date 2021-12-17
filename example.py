@@ -18,7 +18,18 @@ flowers_path = ["imgs/flower.jpeg", "imgs/flower_pink.jpeg",
 
 # %%
 # optimize
-R = np.array([8, 16, 24, 32, 48, 64]) # circle radius
+example = "rect" # rect, square or circle
+
+if example == "rect":
+    R = np.array([(8, 16), (24, 32), (48, 64)]) # rect sizes
+elif example == "circle":
+    R = np.array([8, 16, 24, 32, 48, 64]) # circle radius
+elif example == "square":
+    R = np.array([(8,8)]) # square
+else:
+    print("Invalid option. Using circle option")
+    R = np.array([8, 16, 24, 32, 48, 64]) # circle radius
+
 
 opt = po.PackingOptimizer(R, image)
 centers = opt()
