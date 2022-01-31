@@ -72,6 +72,11 @@ float roundoff(float value, float prec)
 }
 
 
+float rand1d(float v)
+{
+    return cos(v + cos(v * 90.1415) * 100.1415) * 0.5 + 0.5;
+}
+
 
 void main() 
 {

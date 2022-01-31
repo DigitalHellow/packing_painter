@@ -15,6 +15,7 @@ struct element
     double x;
     double y;
     double r;
+    double r2;
 
     double scale;
     std::string filename;
@@ -28,7 +29,7 @@ struct element
 
 void to_json(json& j, const element& d)
 {
-    j = json{{"x", d.x}, {"y", d.y}, {"r", d.r},
+    j = json{{"x", d.x}, {"y", d.y}, {"r", d.r}, {"r2", d.r2},
         {"scale", d.scale}, {"filename", d.filename}};
 }   
 
@@ -37,6 +38,7 @@ void from_json(const json& j, element& d)
     j.at("x").get_to(d.x);
     j.at("y").get_to(d.y);
     j.at("r").get_to(d.r);
+    j.at("r2").get_to(d.r2);
     j.at("scale").get_to(d.scale);
     j.at("filename").get_to(d.filename);
 }

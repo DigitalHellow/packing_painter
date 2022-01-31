@@ -205,30 +205,32 @@ class PackingOptimizer:
         """
         Creates a sample of the image after the optimization
         """
-        flower_images = {}
+        m_images = {}
 
+        if hasattr(self.R[0], '__iter__'):
+            return "Unsopported"
         for r in self.R:
             h = int(2*scale*r)
             w = int(2*scale*r)
-            flower_images[r] = [
+            m_images[r] = [
                 cv2.resize(labeled_filter, (w+1, h+1))
                 for labeled_filter in labeled_filters
             ]
 
-        # create new image using the flowers
+        # create new image
         should_rotate = True
         synthetic_img = np.zeros((*self.image.shape, 4), dtype=np.uint8)
-        # add the biggest flowers last, so that they stay on top
+        # add the biggest images last, so that they stay on top
         # of the generated image
         self.centers.sort(key=lambda c: c[-1])
         for center in self.centers:
             x, y, r = center
             angle = np.random.randint(360) if should_rotate else 0
-            flower_img = random.choice(flower_images[r])
-            flower_img = rotate(flower_img, angle=angle, reshape=False)
-            mask = utils.rec_mask(self.image, x, y, int(scale*r)+1)
+            m_img = random.choice(m_images[r])
+            m_img = rotate(m_img, angle=angle, reshape=False)
+            mask = self.calc_mask(x, y, scale*r+1)
 
-            overlayed = utils.overlay(synthetic_img[mask], flower_img)
+            overlayed = utils.overlay(synthetic_img[mask], m_img)
             synthetic_img[mask] = overlayed.reshape(-1,4)
 
         return synthetic_img

@@ -189,6 +189,6 @@ cython_debug/
 
 # config
 config/
-# manual tests
+# test
 test.py
 test/
