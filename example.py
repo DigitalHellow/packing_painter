@@ -35,12 +35,12 @@ opt = po.PackingOptimizer(R, image)
 centers = opt()
 
 c = np.array(
-    [opt.circle_mask(*p) for p in centers]
+    [opt.calc_mask(*p) for p in centers]
 ).sum(0)
 
 # save data to use with open gl
-opt.save_solution("data", ["imgs/masked_0.png", "imgs/masked_1.png",
-    "imgs/masked_2.png"])
+# opt.save_solution("data", ["imgs/masked_0.png", "imgs/masked_1.png",
+#     "imgs/masked_2.png"])
 
 # show solution
 plt.imshow(image - c, cmap="gray")
