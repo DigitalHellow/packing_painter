@@ -3,6 +3,7 @@ Running example of how to use the packing optimizer
 """
 
 # %%
+import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +19,7 @@ flowers_path = ["imgs/flower.jpeg", "imgs/flower_pink.jpeg",
 
 # %%
 # optimize
-example = "rect" # rect, square or circle
+example = "circle" # rect, square or circle
 
 if example == "rect":
     R = np.array([(8, 16), (24, 32), (48, 64)]) # rect sizes
@@ -43,6 +44,7 @@ c = np.array(
 #     "imgs/masked_2.png"])
 
 # show solution
+plt.figure(figsize=(15, 15))
 plt.imshow(image - c, cmap="gray")
 
 # %%
@@ -88,6 +90,11 @@ for i, labeled_filter in enumerate(labeled_filters):
     cv2.imwrite(f"imgs/masked_{i}.png", labeled_filter)
 plt.tight_layout()
 plt.show()
+
+# %%
+opt.save_solution("data", 
+        [f"imgs/Cards/{f}" for f in os.listdir("imgs/Cards/")],
+    scale=4)
 
 # %%
 scale = 1.5
