@@ -14,15 +14,16 @@ from optimizer import object_segmentation as ob_seg
 
 target_image = "imgs/Reserva_preto.jpg"
 image = utils.load_bin_image(target_image, True)
-flowers_path = ["imgs/flower.jpeg", "imgs/flower_pink.jpeg",
-    "imgs/flower2.jpeg"]
+flowers_path = ["imgs/flower.jpeg", 
+    "imgs/flower_pink.jpeg", "imgs/flower2.jpeg"]
 
 # %%
 # optimize
-example = "circle" # rect, square or circle
+example = "rect" # rect, square or circle
 
 if example == "rect":
-    R = np.array([(8, 16), (24, 32), (48, 64)]) # rect sizes
+    R = np.array([(8, 16), (24, 32), (48, 64), (128,128),
+        (64, 48), (16, 8), (32, 24)]) # rect sizes
 elif example == "circle":
     R = np.array([8, 16, 24, 32, 48, 64]) # circle radius
 elif example == "square":
@@ -33,7 +34,7 @@ else:
 
 
 opt = po.PackingOptimizer(R, image)
-centers = opt()
+centers = opt(10, 0.1)
 
 c = np.array(
     [opt.calc_mask(*p) for p in centers]
@@ -46,6 +47,11 @@ c = np.array(
 # show solution
 plt.figure(figsize=(15, 15))
 plt.imshow(image - c, cmap="gray")
+
+
+opt.save_solution("data", 
+        [f"imgs/Cards/{f}" for f in os.listdir("imgs/Cards/")],
+    scale=4)
 
 # %%
 # Get flowers from our image.
@@ -90,11 +96,6 @@ for i, labeled_filter in enumerate(labeled_filters):
     cv2.imwrite(f"imgs/masked_{i}.png", labeled_filter)
 plt.tight_layout()
 plt.show()
-
-# %%
-opt.save_solution("data", 
-        [f"imgs/Cards/{f}" for f in os.listdir("imgs/Cards/")],
-    scale=4)
 
 # %%
 scale = 1.5

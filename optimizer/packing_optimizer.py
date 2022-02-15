@@ -7,6 +7,7 @@ problem
 import cv2
 import json
 import random
+import joblib
 import numpy as np
 
 import scipy.signal as signal
@@ -26,7 +27,9 @@ class PackingOptimizer:
     """
 
     def __init__(self, R: Iterable[Size], image: np.ndarray) -> None:
-        self.centers: List[Tuple[int, int, int]]
+        self.centers: List[Tuple[int, int, Size]]
+        self.initial_solution: List[Tuple[int, int, Size]]
+
         self.image = image.copy() if len(image.shape) == 2 \
             else utils.load_bin_image(image, True)
 
@@ -44,8 +47,35 @@ class PackingOptimizer:
         self._AREA = np.sum(self.image == 1)
         
 
-    def __call__(self) -> List[Tuple[int, int, int]]:
-        return self.optimize()
+    def __call__(self, n=10, p=0.1) -> \
+            List[Tuple[int, int, int]]:
+        return self.optimize(n, p)
+
+
+    @property
+    def cost(self) -> int:
+        """
+        Sum of circle's area outside the image and gaps 
+        between circles
+        """
+        return self.total_cost(self.centers, self.image)
+
+    @property
+    def inner_cost(self) -> int:
+        """
+        Area inside the image not filled by circles
+        """
+        mask = np.array(
+            [self.calc_mask(*p) for p in self.centers]
+        ).sum(0)
+        return np.sum(self.image & ~mask)
+
+    @property
+    def outer_cost(self) -> int:
+        """
+        Area outside the image filled by circles
+        """
+        return self.cost - self.inner_cost
 
 
     def pick_center(self, picked_centers: List[Tuple[int, int, int]],
@@ -100,8 +130,11 @@ class PackingOptimizer:
         R_copy = list(self.R)
         # remove bigger radius
         if type(R_copy[0]) == np.ndarray:
-            R_copy = R_copy[:next((i 
-                for i, r in enumerate(R_copy) if r is center[2]))]    
+            try:
+                R_copy = R_copy[:next((i 
+                    for i, r in enumerate(R_copy) if r is center[2]))]    
+            except StopIteration:
+                R_copy = []
         else:
             R_copy = R_copy[:R_copy.index(center[2])]
 
@@ -115,12 +148,12 @@ class PackingOptimizer:
         return (picked_centers, True)
 
 
-    def out_cost(self, center: Tuple[int, int, Size],
-            image: np.ndarray) -> int:
+    def out_cost(self, center: Tuple[int, int, Size]) \
+            -> int:
         """
         Area of the given object outside the image
         """
-        return self.area_outside(image, *center)
+        return self.area_outside(self.image, *center)
 
 
     def area_outside(self, img: np.ndarray, cx: int, 
@@ -133,7 +166,7 @@ class PackingOptimizer:
 
 
     def total_cost(self, 
-            picked_centers: List[Tuple[int, int, int]],
+            picked_centers: List[Tuple[int, int, Size]],
             image: np.ndarray) -> int:
         """
         Sum of circle's area outside the image and gaps 
@@ -145,8 +178,73 @@ class PackingOptimizer:
         cost = np.sum(image ^ circles)
         return cost
 
+
+    def greedy_solution(self, _picked_centers=[]):
+        """
+        Uses a greedy approach to solve the packing
+        problem
+        """
+        # initial solution
+        picked_centers = _picked_centers.copy()
+        while (center:= self.pick_center(picked_centers, 
+                self.image)) is not None:
+            picked_centers += [center]
+
+        # cost of each circle
+        c_costs = [self.out_cost(c) 
+            for c in picked_centers]
+
+        # optimize circles which are outside the image
+        n_picked_centers = picked_centers
+
+        while True:
+            m = np.argmax(c_costs)
+            _n_picked_centers, changed = self.minimize_circle_loss(
+                n_picked_centers[m], self.image, n_picked_centers)
+            
+            if changed:
+                n_picked_centers = _n_picked_centers
+            else:
+                break
+
+            c_costs = [self.out_cost(c) 
+                for c in n_picked_centers]
+
+        return n_picked_centers
+
+
+    def random_removal(self, 
+            centers: List[Tuple[int, int, Size]],
+            p: float) -> List[Tuple[int, int, Size]]:
+        """
+        Removes p% of points from the centes
+        """
+        k = int((1-p) * len(centers))
+        return random.sample(centers, k)
+
+
+    def repair(self, centers: List[Tuple[int, int, Size]],
+            n :int, best_cost: int) -> List[Tuple[int, int, Size]]:
+        """
+        Recreates points of the solution after removal
+        """
+        def parallel_greedy(centers):
+            n_picked_centers = self.greedy_solution(centers)
+            cost = self.total_cost(n_picked_centers, self.image)
+            return (n_picked_centers, cost)
+
+        results = joblib.Parallel(n_jobs=joblib.cpu_count())(
+            joblib.delayed(parallel_greedy)(centers) for _ in range(n))
+        centers, cost = min(results, key=lambda x: x[1])
+        
+        if cost < best_cost:
+            self.centers = centers
+            print(f"\t(Repair) Best cost: {cost}")
+
+        return self.centers
+
     
-    def optimize(self) -> List[Tuple[
+    def optimize(self, n=100, p=0.1) -> List[Tuple[
             int, int, Size]]:
         """
         Solves the packing problem and returns the center coords and 
@@ -168,36 +266,21 @@ class PackingOptimizer:
             self.centers = centers.copy()
             return centers
 
-
+        print("Greedy algorithm start")
         # real optimization starts here
-        picked_centers = [] # initial solution
-        while (center:= self.pick_center(picked_centers, 
-                self.image)) is not None:
-            picked_centers += [center]
+        # run greedy algorithm for n tries
+        self.repair([], n, np.inf)
 
-        # cost of each circle
-        c_costs = [self.out_cost(c, self.image) 
-            for c in picked_centers]
+        print("Greedy algorithm done")
 
-        # optimize circles which are outside the image
-        n_picked_centers = picked_centers
-        for i in range(50): # max of 50 rounds
-            m = np.argmax(c_costs)
-            _n_picked_centers, changed = self.minimize_circle_loss(
-                n_picked_centers[m], self.image, n_picked_centers)
-            
-            if changed:
-                n_picked_centers = _n_picked_centers
-            else:
-                break
+        self.initial_solution = self.centers.copy()
 
-            c_costs = [self.out_cost(c, self.image) 
-                for c in n_picked_centers]
-            if i%10 == 0:
-                print(i)
+        for _n in range(5 * n):
+            n_centers = self.random_removal(self.centers, p)
+            print(f"Starting iter {_n} with p = {p}")
+            self.repair(n_centers, n, self.cost)
 
-        self.centers = n_picked_centers
-        return n_picked_centers.copy()
+        return self.centers.copy()
 
 
     def make_image(self, scale: float,
