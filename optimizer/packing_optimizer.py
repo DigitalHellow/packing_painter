@@ -9,6 +9,7 @@ import json
 import random
 import joblib
 import numpy as np
+from PIL import Image
 
 import scipy.signal as signal
 from scipy.ndimage.interpolation import rotate
@@ -26,7 +27,8 @@ class PackingOptimizer:
     with circles.
     """
 
-    def __init__(self, R: Iterable[Size], image: np.ndarray, rotate_90=False) -> None:
+    def __init__(self, R: Iterable[Size], 
+            image: np.ndarray, rotate_90=False) -> None:
         self.centers: List[Tuple[int, int, Size]]
         self.initial_solution: List[Tuple[int, int, Size]]
 
@@ -53,6 +55,22 @@ class PackingOptimizer:
             List[Tuple[int, int, int]]:
         return self.optimize(n, p)
 
+
+    @classmethod
+    def from_images(cls, imgs_path: Iterable[str],
+            scales: Iterable[float], image: np.ndarray,
+            rotate_90=False) -> "PackingOptimizer":
+        """
+        Creates the optimizer using the sizes from images
+        """
+        shapes = [Image.open(img_path).size
+            for img_path in imgs_path]
+        R = [(int(s[0] * sc), int(s[1] * sc))
+                for s in shapes 
+                    for sc in scales]
+
+        return cls(R, image, rotate_90)
+        
 
     @property
     def cost(self) -> int:
