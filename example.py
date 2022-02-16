@@ -19,11 +19,10 @@ flowers_path = ["imgs/flower.jpeg",
 
 # %%
 # optimize
-example = "rect" # rect, square or circle
+example = "circle" # rect, square or circle
 
 if example == "rect":
-    R = np.array([(8, 16), (24, 32), (48, 64), (128,128),
-        (64, 48), (16, 8), (32, 24)]) # rect sizes
+    R = np.array([(8, 16), (24, 32), (48, 64), (128,128)]) # rect sizes
 elif example == "circle":
     R = np.array([8, 16, 24, 32, 48, 64]) # circle radius
 elif example == "square":
@@ -32,9 +31,12 @@ else:
     print("Invalid option. Using circle option")
     R = np.array([8, 16, 24, 32, 48, 64]) # circle radius
 
+opt = po.PackingOptimizer.from_images(flowers_path,
+    [0.2, 0.1, 0.05], image)
+#%%
 
-opt = po.PackingOptimizer(R, image)
-centers = opt(10, 0.1)
+opt = po.PackingOptimizer(R, image, True)
+centers = opt(10, 0.2)
 
 c = np.array(
     [opt.calc_mask(*p) for p in centers]
@@ -52,6 +54,24 @@ plt.imshow(image - c, cmap="gray")
 opt.save_solution("data", 
         [f"imgs/Cards/{f}" for f in os.listdir("imgs/Cards/")],
     scale=4)
+    
+#%%
+
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15, 15))
+
+c = np.array(
+    [opt.calc_mask(*p) for p in opt.centers]
+).sum(0)
+
+# show solution
+axes[0].imshow(image - c, cmap="gray")
+
+c = np.array(
+    [opt.calc_mask(*p) for p in opt.initial_solution]
+).sum(0)
+
+# show initial solution
+axes[1].imshow(image - c, cmap="gray")
 
 # %%
 # Get flowers from our image.
