@@ -26,7 +26,7 @@ class PackingOptimizer:
     with circles.
     """
 
-    def __init__(self, R: Iterable[Size], image: np.ndarray) -> None:
+    def __init__(self, R: Iterable[Size], image: np.ndarray, rotate_90=False) -> None:
         self.centers: List[Tuple[int, int, Size]]
         self.initial_solution: List[Tuple[int, int, Size]]
 
@@ -36,13 +36,15 @@ class PackingOptimizer:
         self.is_rec = hasattr(R[0], '__iter__')
         if self.is_rec:
             self.R = [np.array(r, dtype=np.int16) for r in R]
-            # lambda just for the sweet lru cache
+            if rotate_90: self.R += [np.array(r[::-1], dtype=np.int16) for r in R]
             self.calc_mask = lambda x, y, r: utils.mrec_mask(
                 self.image.shape)(x, y, r[0], r[1])
         
         else:
             self.R = R.astype(np.int16) # circles radius
-            self.calc_mask = utils.mcircle_mask(self.image.shape)
+            # lambda so joblib works
+            self.calc_mask = lambda x, y, r: utils.mcircle_mask(
+                self.image.shape)(x, y, r)
 
         self._AREA = np.sum(self.image == 1)
         
