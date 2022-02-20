@@ -7,6 +7,24 @@ from functools import lru_cache
 from typing import Callable, List, Tuple
 
 
+
+def vsection_image(img: np.ndarray, n: int) -> \
+        List[np.ndarray]:
+    """
+    Creates n vertical sections on the given image
+    """
+    im_shape = img.shape
+    h = im_shape[1] // n
+    half_h = im_shape[1] // (2 * n)
+  
+    rec_mask = mrec_mask(im_shape)
+    get_section = lambda i: img * rec_mask(0, i*h+half_h,
+            im_shape[0], half_h)
+    sections = map(get_section, range(n))
+
+    return list(sections)
+
+
 def load_bin_image(path: str, inv=False) -> np.ndarray:
     """
     Loads image and turn it into an image of 0s and 1s

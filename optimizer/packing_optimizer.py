@@ -14,9 +14,11 @@ from PIL import Image
 import scipy.signal as signal
 from scipy.ndimage.interpolation import rotate
 
-from typing import Iterable, List, Tuple, Union
+from typing import (Any, Dict, Iterable, 
+    List, Tuple, Union)
 
 from . import utils
+
 
 # writing union all the time 
 Size = Union[int, np.ndarray]
@@ -303,46 +305,10 @@ class PackingOptimizer:
         return self.centers.copy()
 
 
-    def make_image(self, scale: float,
-            labeled_filters: np.ndarray) -> np.ndarray:
+    def get_dict(self, image_names: Iterable[str], 
+            scale=1.0) -> Dict[str, Dict[str, Any]]:
         """
-        Creates a sample of the image after the optimization
-        """
-        m_images = {}
-
-        if hasattr(self.R[0], '__iter__'):
-            return "Unsopported"
-        for r in self.R:
-            h = int(2*scale*r)
-            w = int(2*scale*r)
-            m_images[r] = [
-                cv2.resize(labeled_filter, (w+1, h+1))
-                for labeled_filter in labeled_filters
-            ]
-
-        # create new image
-        should_rotate = True
-        synthetic_img = np.zeros((*self.image.shape, 4), dtype=np.uint8)
-        # add the biggest images last, so that they stay on top
-        # of the generated image
-        self.centers.sort(key=lambda c: c[-1])
-        for center in self.centers:
-            x, y, r = center
-            angle = np.random.randint(360) if should_rotate else 0
-            m_img = random.choice(m_images[r])
-            m_img = rotate(m_img, angle=angle, reshape=False)
-            mask = self.calc_mask(x, y, scale*r+1)
-
-            overlayed = utils.overlay(synthetic_img[mask], m_img)
-            synthetic_img[mask] = overlayed.reshape(-1,4)
-
-        return synthetic_img
-
-
-    def save_solution(self, filename: str,
-            image_names: Iterable[str], scale=1.0) -> None:
-        """
-        Saves the solution to be rendered by Open GL
+        Returns the data in a dict format
         """
         WIDTH, HEIGHT = self.image.shape
         data = {str(i): {
@@ -357,6 +323,69 @@ class PackingOptimizer:
                 "scale": scale
             }
             for i, center in enumerate(self.centers)}
+        
+        return data
+
+    def save_solution(self, filename: str,
+            image_names: Iterable[str], scale=1.0) -> None:
+        """
+        Saves the solution to be rendered by Open GL
+        """
+        data = self.get_dict(image_names, scale)
+        
+        if not filename.startswith("config/"): 
+            filename = "config/" + filename
+        if not filename.endswith(".json"): 
+            filename += ".json"
+        
+        with open(filename, "w") as f:
+            json.dump(data, f)
+
+
+
+class SecPackingOptimizer:
+    """
+    Sections the image in different parts and creates
+    a packing optimizer for each one.
+    """
+    def __init__(self, n_sections: int, Rs: Iterable[Iterable[Size]], 
+            image: np.ndarray, rotate_90=False) -> None:
+        self.centers: List[Tuple[int, int, Size]]
+
+        if type(rotate_90) == bool:
+            rotate_90 = [rotate_90] * n_sections
+
+        sections = utils.vsection_image(image, n_sections)
+        self.opts = [PackingOptimizer(Rs[n], 
+            sections[n], rotate_90[n]) 
+            for n in range(n_sections)]
+
+    
+    def __call__(self, ns=10, ps=0.1) -> \
+            List[Tuple[int, int, int]]:
+        """
+        Calls every optimizer
+        """
+        if type(ns) == int: ns = [ns] * len(self.opts)
+        if type(ps) == float or type(ps) == int:
+            ps = [ps] * len(self.opts)
+        centers = [opt(ns[i], ps[i]) 
+            for i, opt in enumerate(self.opts)]
+        self.centers = [c for cnt in centers for c in cnt]
+        return self.centers.copy()
+
+    
+    def save_solution(self, filename: str,
+            image_names: Iterable[Iterable[str]], scale=1.0) -> None:
+        """
+        Saves the solution to be rendered by Open GL
+        """
+        data_list = [opt.get_dict(image_names[i]) 
+            for i, opt in enumerate(self.opts)]
+
+        data = {str(j + i * len(dt.values())): d
+            for i, dt in enumerate(data_list)
+                for j, d in enumerate(dt.values())}
 
         if not filename.startswith("config/"): 
             filename = "config/" + filename
@@ -366,3 +395,4 @@ class PackingOptimizer:
         with open(filename, "w") as f:
             json.dump(data, f)
 
+        return data
