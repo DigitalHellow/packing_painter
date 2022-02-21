@@ -43,7 +43,7 @@ c = np.array(
 plt.figure(figsize=(15, 15))
 plt.imshow(image - c, cmap="gray")
 
-opts.save_solution("data_seg", 
+data = opts.save_solution("data_seg", 
        [[f"imgs/Cards/{f}" for f in os.listdir("imgs/Cards/")]] * n,
     scale=4)
 # %%

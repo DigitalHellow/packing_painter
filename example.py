@@ -19,7 +19,7 @@ flowers_path = ["imgs/flower.jpeg",
 
 # %%
 # optimize
-example = "circle" # rect, square or circle
+example = "rect" # rect, square or circle
 
 if example == "rect":
     R = np.array([(8, 16), (24, 32), (48, 64), (128,128)]) # rect sizes
@@ -117,11 +117,4 @@ for i, labeled_filter in enumerate(labeled_filters):
 plt.tight_layout()
 plt.show()
 
-# %%
-scale = 1.5
-synthetic_img = opt.make_image(scale, labeled_filters)
-
-plt.imshow(synthetic_img)
-# save output
-cv2.imwrite("imgs/out.png", synthetic_img)
 # %%

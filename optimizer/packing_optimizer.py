@@ -380,12 +380,16 @@ class SecPackingOptimizer:
         """
         Saves the solution to be rendered by Open GL
         """
-        data_list = [opt.get_dict(image_names[i], scale) 
+        self.data_list = [opt.get_dict(image_names[i], scale) 
             for i, opt in enumerate(self.opts)]
 
-        data = {str(j + i * len(dt.values())): d
-            for i, dt in enumerate(data_list)
-                for j, d in enumerate(dt.values())}
+        counter = 0
+
+        data = {}
+        for dt in self.data_list:
+            for d in dt.values():
+                data[str(counter)] = d
+                counter += 1
 
         if not filename.startswith("config/"): 
             filename = "config/" + filename
